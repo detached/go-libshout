@@ -175,15 +175,16 @@ func (s *Shout) Close() error {
 }
 
 func (s *Shout) send(buffer []byte) error {
-	ptr := (*C.uchar)(&buffer[0])
+	C.shout_sync(s.struc)
+
+        ptr := (*C.uchar)(&buffer[0])
 	C.shout_send(s.struc, ptr, C.size_t(len(buffer)))
 
 	errno := int(C.shout_get_errno(s.struc))
 	if errno != C.SHOUTERR_SUCCESS {
-		fmt.Println("something went wrong: %d", errno)
+		fmt.Printf("something went wrong: %d", errno)
 	}
 
-	C.shout_sync(s.struc)
 	return nil
 }
 
