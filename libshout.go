@@ -80,10 +80,8 @@ type Shout struct {
 	Protocol int
 
 	// wrap the native C struct
-	struc *C.struct_shout
+	struc    *C.struct_shout
 	metadata *C.struct_shout_metadata_t
-	
-	stream chan []byte
 }
 
 func init() {
@@ -105,8 +103,6 @@ func (s *Shout) lazyInit() {
 
 	s.struc = C.shout_new()
 	s.updateParameters()
-
-	s.stream = make(chan []byte)
 }
 
 func (s *Shout) updateParameters() {
@@ -146,20 +142,18 @@ func (s *Shout) GetError() string {
 	return C.GoString(err)
 }
 
-func (s *Shout) Open() (chan<- []byte, error) {
+func (s *Shout) Open() error {
 	s.lazyInit()
 
 	errcode := int(C.shout_open(s.struc))
 	if errcode != C.SHOUTERR_SUCCESS {
-		return nil, ShoutError{
+		return ShoutError{
 			Code:    errcode,
 			Message: s.GetError(),
 		}
 	}
 
-	go s.handleStream()
-
-	return s.stream, nil
+	return nil
 }
 
 func (s *Shout) Close() error {
@@ -174,33 +168,32 @@ func (s *Shout) Close() error {
 	return nil
 }
 
-func (s *Shout) send(buffer []byte) error {
-	C.shout_sync(s.struc)
-
-        ptr := (*C.uchar)(&buffer[0])
+func (s *Shout) Send(buffer []byte) error {
+	ptr := (*C.uchar)(&buffer[0])
 	C.shout_send(s.struc, ptr, C.size_t(len(buffer)))
 
 	errno := int(C.shout_get_errno(s.struc))
 	if errno != C.SHOUTERR_SUCCESS {
-		fmt.Printf("something went wrong: %d", errno)
+		return ShoutError{
+			Code:    errno,
+			Message: s.GetError(),
+		}
 	}
 
 	return nil
 }
 
-func (s *Shout) handleStream() {
-	for buf := range s.stream {
-		s.send(buf)
-	}
+func (s *Shout) Sync() {
+	C.shout_sync(s.struc)
 }
 
-func (s *Shout) UpdateMetadata( mname string, mvalue string ) {
+func (s *Shout) UpdateMetadata(mname string, mvalue string) {
 	md := C.shout_metadata_new()
 	ptr1 := C.CString(mname)
 	ptr2 := C.CString(mvalue)
-	C.shout_metadata_add( md, ptr1, ptr2 )
+	C.shout_metadata_add(md, ptr1, ptr2)
 	C.free(unsafe.Pointer(ptr1))
 	C.free(unsafe.Pointer(ptr2))
-	C.shout_set_metadata( s.struc, md )
+	C.shout_set_metadata(s.struc, md)
 	C.shout_metadata_free(md)
 }
